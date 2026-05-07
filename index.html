@@ -2122,6 +2122,46 @@ function openProductDetail(pid){
   const p=state.products.find(x=>x.id===pid);if(!p) return;
   if(!state.currentUser){toast('Sign in to access this product','info');showPage('auth');return;}
   const u=state.currentUser;
+
+  // ── PER-USE CREDIT PRODUCTS (mono='credit', creditAction>0) ──
+  // These charge creditAction credits each time the tool is launched.
+  // They do NOT require a one-time "purchase" — every launch costs credits.
+  const isPerUse = p.mono==='credit' && (p.creditAction||0)>0;
+  if(isPerUse){
+    const cost=p.creditAction||1;
+    state.pendingPurchase=p;
+    document.getElementById('purchase-modal-content').innerHTML=`
+      <div style="background:var(--surface);border-radius:12px;padding:1.2rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;gap:1rem">
+          <span style="font-size:2.5rem">${p.emoji}</span>
+          <div><div style="font-family:var(--font);font-weight:700;font-size:1.1rem">${p.name}</div>
+          <div style="color:var(--muted);font-size:.85rem">${p.desc}</div></div>
+        </div>
+      </div>
+      <div style="background:rgba(124,109,250,.07);border:1px solid rgba(124,109,250,.2);border-radius:10px;padding:.9rem 1.1rem;margin-bottom:.5rem;font-size:.88rem;color:var(--muted)">
+        💡 এই tool প্রতিবার launch করলে <strong style="color:var(--accent)">💎 ${cost} credit</strong> কাটবে।
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:.8rem 0;border-top:1px solid var(--border)">
+        <span style="color:var(--muted)">Launch Cost</span><span style="font-family:var(--font);font-weight:700;color:var(--accent)">💎 ${cost} Credit${cost>1?'s':''}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:.8rem 0">
+        <span style="color:var(--muted)">Your Balance</span><span style="font-family:var(--font);font-weight:700;color:var(--accent3)">💎 ${u.credits} Credits</span>
+      </div>
+      ${u.credits<cost?'<div style="background:rgba(250,109,109,.1);border:1px solid rgba(250,109,109,.2);border-radius:10px;padding:.8rem 1rem;color:var(--accent2);font-size:.85rem;margin-top:.5rem">⚠️ Insufficient credits. <a onclick="closeModal(\'purchase-modal\');showPage(\'buy-credits\')" style="color:var(--accent);cursor:pointer">Buy more credits →</a></div>':''}
+    `;
+    // Swap confirm button text for per-use context
+    const actionsEl=document.querySelector('#purchase-modal .modal-actions');
+    if(actionsEl){
+      actionsEl.innerHTML=`
+        <button class="btn-full" onclick="confirmPerUseLaunch()" ${u.credits<cost?'disabled style="opacity:.5;cursor:not-allowed"':''}>▶ Launch & Deduct 💎 ${cost} Credit${cost>1?'s':''}</button>
+        <button class="btn-full secondary" onclick="closeModal('purchase-modal')">Cancel</button>
+      `;
+    }
+    openModal('purchase-modal');
+    return;
+  }
+
+  // ── ONE-TIME OWNERSHIP PURCHASE (subscription / onetime / manual) ──
   const owned=u.purchases.includes(pid)||p.price===0;
   if(owned){launchSoftware(p);return;}
   state.pendingPurchase=p;
@@ -2141,13 +2181,35 @@ function openProductDetail(pid){
     </div>
     ${u.credits<p.price?'<div style="background:rgba(250,109,109,.1);border:1px solid rgba(250,109,109,.2);border-radius:10px;padding:.8rem 1rem;color:var(--accent2);font-size:.85rem;margin-top:.5rem">⚠️ Insufficient credits. <a onclick="closeModal(\'purchase-modal\');showPage(\'buy-credits\')" style="color:var(--accent);cursor:pointer">Buy more credits →</a></div>':''}
   `;
+  // Restore default confirm button if it was overwritten
+  const actionsEl2=document.querySelector('#purchase-modal .modal-actions');
+  if(actionsEl2){
+    actionsEl2.innerHTML=`
+      <button class="btn-full" onclick="confirmPurchase()">✅ Confirm Purchase</button>
+      <button class="btn-full secondary" onclick="closeModal('purchase-modal')">Cancel</button>
+    `;
+  }
   openModal('purchase-modal');
+}
+function confirmPerUseLaunch(){
+  // Deduct creditAction credits and launch — no ownership recorded
+  const p=state.pendingPurchase;const u=state.currentUser;
+  if(!p||!u) return;
+  const cost=p.creditAction||1;
+  if(u.credits<cost){toast('Not enough credits','error');return;}
+  u.credits-=cost;
+  saveUsersToStorage();
+  updateNav();
+  closeModal('purchase-modal');
+  toast(`💎 ${cost} credit${cost>1?'s':''} deducted — launching ${p.name}...`,'success');
+  setTimeout(()=>launchSoftware(p),400);
 }
 function confirmPurchase(){
   const p=state.pendingPurchase;const u=state.currentUser;
   if(!p||!u) return;
   if(u.credits<p.price){toast('Not enough credits','error');return;}
   u.credits-=p.price;u.purchases.push(p.id);
+  saveUsersToStorage();
   closeModal('purchase-modal');toast(`✅ ${p.name} purchased! Launching now...`,'success');
   updateNav();setTimeout(()=>launchSoftware(p),400);
 }
