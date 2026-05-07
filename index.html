@@ -589,6 +589,7 @@ nav .nav-inner{max-width:1600px;margin:0 auto;width:100%;display:flex;align-item
     <div class="lock-title">Access Denied</div>
     <div class="lock-sub" style="margin-bottom:1.5rem">এই page টি শুধুমাত্র Admin এর জন্য সংরক্ষিত।</div>
     <button class="btn-full" onclick="document.getElementById('admin-lock').classList.remove('show');showPage('home')">← Store এ ফিরুন</button>
+    <button class="btn-full secondary" style="margin-top:.6rem;font-size:.8rem;opacity:.7" onclick="resetStorageAndReload()">🔄 Login সমস্যা? Storage Reset করুন</button>
   </div>
 </div>
 
@@ -1609,17 +1610,17 @@ function _hashPass(pass){
   return h.toString(16).padStart(8,'0') + (h^0xdeadbeef).toString(36);
 }
 function _checkPass(inputPass, storedHash){
-  // Support legacy plain-text passwords (migration) and hashed
-  if(storedHash && storedHash.length > 16 && !/^\d{4,}$/.test(storedHash)){
-    // Looks like a hash — compare
-    return _hashPass(inputPass) === storedHash;
-  }
-  // Legacy plain text comparison (will be upgraded on next save)
-  return inputPass === storedHash;
+  if(!storedHash) return false;
+  // Always try hash comparison first
+  if(_hashPass(inputPass) === storedHash) return true;
+  // Fallback: legacy plain-text comparison (for old accounts before hashing was added)
+  if(storedHash.length <= 32 && inputPass === storedHash) return true;
+  return false;
 }
 function _upgradePassIfNeeded(user, inputPass){
-  // If password is still plain text, upgrade to hash
-  if(user.pass && user.pass.length <= 20 && !/^[0-9a-f]{8}/.test(user.pass)){
+  // If stored password is plain text (not a hash), upgrade to hash
+  // A hash from _hashPass is always 8+ hex chars followed by base-36 chars
+  if(user.pass && _hashPass(inputPass) !== user.pass && inputPass === user.pass){
     user.pass = _hashPass(inputPass);
     saveUsersToStorage();
   }
@@ -1631,20 +1632,38 @@ const DEFAULT_ADMIN={id:'admin',name:'Arif Abbas',email:'arif.abbas.bsl@gmail.co
 function initApp(){
   const saved = window.__secureStore.get(SETUP_KEY);
   if(saved){
-    const data=JSON.parse(saved);
-    const hasAdmin=data.users&&data.users.find(u=>u.role==='admin');
-    state.users=hasAdmin?data.users:[DEFAULT_ADMIN,...(data.users||[])];
-    if(data.categories) state.categories=data.categories;
-    if(data.products&&data.products.length) state.products=data.products;
-    if(data.paymentMethods) state.paymentMethods=data.paymentMethods;
-    if(data.creditRequests) state.creditRequests=data.creditRequests;
-    if(data.orders) state.orders=data.orders;
-    if(data.accountPools) state.accountPools=data.accountPools;
-    if(data.subscriptions) state.subscriptions=data.subscriptions;
-    if(data.globalWhatsapp) state.globalWhatsapp=data.globalWhatsapp;
-    if(data.siteConfig) state.siteConfig={...state.siteConfig,...data.siteConfig};
-    if(data.homepageSettings) state.homepageSettings={...state.homepageSettings,...data.homepageSettings};
-    if(data.productStats) state.productStats=data.productStats;
+    let data;
+    try { data = JSON.parse(saved); } catch(e) { data = null; }
+    if(!data){
+      // Corrupt/unreadable data (old encryption) — reset to defaults
+      state.users=[DEFAULT_ADMIN];
+      saveUsersToStorage();
+    } else {
+      const adminFromStorage = data.users && data.users.find(u=>u.role==='admin');
+      if(adminFromStorage){
+        // Validate stored admin password hash is a proper hash (length > 16)
+        // If not (e.g. corrupted by old encryption), reset it to DEFAULT_ADMIN's hash
+        if(!adminFromStorage.pass || adminFromStorage.pass.length < 16){
+          adminFromStorage.pass = DEFAULT_ADMIN.pass;
+        }
+        state.users = data.users;
+      } else {
+        state.users = [DEFAULT_ADMIN, ...(data.users||[])];
+      }
+      if(data.categories) state.categories=data.categories;
+      if(data.products&&data.products.length) state.products=data.products;
+      if(data.paymentMethods) state.paymentMethods=data.paymentMethods;
+      if(data.creditRequests) state.creditRequests=data.creditRequests;
+      if(data.orders) state.orders=data.orders;
+      if(data.accountPools) state.accountPools=data.accountPools;
+      if(data.subscriptions) state.subscriptions=data.subscriptions;
+      if(data.globalWhatsapp) state.globalWhatsapp=data.globalWhatsapp;
+      if(data.siteConfig) state.siteConfig={...state.siteConfig,...data.siteConfig};
+      if(data.homepageSettings) state.homepageSettings={...state.homepageSettings,...data.homepageSettings};
+      if(data.productStats) state.productStats=data.productStats;
+      // Re-save with new encryption so everything is properly stored
+      saveUsersToStorage();
+    }
   } else {
     state.users=[DEFAULT_ADMIN];
     saveUsersToStorage();
@@ -1654,6 +1673,13 @@ function initApp(){
   renderProducts();
   applySiteConfig();
 }
+function resetStorageAndReload(){
+  if(!confirm('⚠️ এটি সমস্ত local data (products, users, orders) মুছে দেবে এবং default Admin password (111111) restore করবে। নিশ্চিত?')) return;
+  // Clear all __dv_ prefixed keys
+  Object.keys(localStorage).filter(k=>k.startsWith('__dv_')||k===SETUP_KEY).forEach(k=>localStorage.removeItem(k));
+  location.reload();
+}
+
 function saveUsersToStorage(){
   // Save complete state — encrypted, NOT readable in DevTools localStorage panel
   const toSave={
