@@ -299,10 +299,17 @@ nav{position:sticky;top:0;z-index:100;background:rgba(8,8,16,.9);backdrop-filter
 .sw-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);z-index:500;display:none;align-items:center;justify-content:center;padding:2rem}
 .sw-overlay.open{display:flex}
 .sw-popup{width:100%;max-width:1600px;max-height:95vh;background:var(--surface);border:1px solid var(--border);border-radius:20px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 100px rgba(0,0,0,.7)}
-.sw-header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--card);flex-shrink:0}
-.sw-header h3{font-family:var(--font);font-weight:700}
-.sw-close{width:36px;height:36px;border-radius:8px;background:var(--sub);border:none;color:var(--text);cursor:pointer;font-size:1.2rem;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.sw-header{padding:.75rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--card);flex-shrink:0;gap:1rem}
+.sw-header h3{font-family:var(--font);font-weight:700;white-space:nowrap}
+.sw-header-mid{flex:1;display:flex;align-items:center;justify-content:center;gap:1rem}
+.sw-credit-bar{display:flex;align-items:center;gap:.6rem;background:rgba(109,250,189,.06);border:1px solid rgba(109,250,189,.18);border-radius:20px;padding:.3rem .9rem;font-size:.82rem;cursor:default}
+.sw-credit-amount{font-family:var(--font);font-weight:700;color:var(--accent3);min-width:2ch;display:inline-block;transition:all .3s}
+.sw-credit-amount.flash-deduct{color:var(--accent2)!important;transform:scale(1.15)}
+.sw-cost-info{color:var(--muted);font-size:.75rem;white-space:nowrap;border-left:1px solid var(--border);padding-left:.6rem;margin-left:.2rem}
+.sw-close{width:36px;height:36px;border-radius:8px;background:var(--sub);border:none;color:var(--text);cursor:pointer;font-size:1.2rem;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
 .sw-close:hover{background:var(--accent2);color:#fff}
+.sw-credit-bar.sw-credit-low{background:rgba(250,109,109,.08)!important;border-color:rgba(250,109,109,.3)!important}
+.sw-credit-bar.sw-credit-low .sw-credit-amount{color:var(--accent2)!important}
 .sw-body{flex:1;overflow:hidden;min-height:0}
 .sw-body iframe{width:100%;height:100%;border:none;min-height:85vh}
 .sw-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:85vh;color:var(--muted);gap:1rem}
@@ -612,6 +619,14 @@ nav .nav-inner{max-width:1600px;margin:0 auto;width:100%;display:flex;align-item
   <div class="sw-popup">
     <div class="sw-header">
       <h3 id="sw-title">Software Name</h3>
+      <div class="sw-header-mid">
+        <div class="sw-credit-bar" id="sw-credit-bar" style="display:none">
+          <span>💎</span>
+          <span id="sw-credit-display">0</span>
+          <span style="color:var(--muted);font-size:.78rem">credits</span>
+          <span class="sw-cost-info" id="sw-cost-info" style="display:none"></span>
+        </div>
+      </div>
       <button class="sw-close" onclick="closeSoftware()">✕</button>
     </div>
     <div class="sw-body" id="sw-body">
@@ -1454,6 +1469,83 @@ nav .nav-inner{max-width:1600px;margin:0 auto;width:100%;display:flex;align-item
             <div id="global-wa-status" style="margin-top:.7rem;font-size:.83rem;text-align:center;min-height:18px"></div>
           </div>
 
+          <!-- SDK INTEGRATION GUIDE -->
+          <div class="form-card">
+            <div class="form-card-title">🔌 Credit Sync SDK — External Apps</div>
+            <div style="color:var(--muted);font-size:.82rem;margin-bottom:1rem">আপনার external app এ নিচের code যোগ করুন। DigiVault থেকে credit info পাবে এবং প্রতি generation এ credit signal পাঠাবে।</div>
+
+            <div style="background:#0a0a14;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:1rem">
+              <div style="background:var(--sub);padding:.5rem 1rem;font-size:.75rem;color:var(--muted);display:flex;align-items:center;justify-content:space-between">
+                <span>📋 DigiVault Credit SDK — আপনার app এ paste করুন</span>
+                <button onclick="copySDK()" style="padding:.25rem .7rem;background:rgba(124,109,250,.2);color:var(--accent);border:1px solid rgba(124,109,250,.3);border-radius:6px;cursor:pointer;font-size:.72rem;font-family:var(--body)">Copy</button>
+              </div>
+              <pre id="sdk-snippet" style="padding:1rem;font-size:.72rem;color:#a0d0ff;overflow-x:auto;margin:0;line-height:1.6;font-family:monospace;white-space:pre-wrap">/* ── DigiVault Credit SDK ── */
+(function(){
+  var dv = {
+    credits: 0,
+    costPerUse: 1,
+    onCreditUpdate: null,   // callback(credits)
+    onDenied: null,         // callback(required, have)
+
+    /* Call this when user does 1 generation / action */
+    useCredit: function(amount){
+      window.parent.postMessage({
+        type: 'DIGIVAULT_USE_CREDIT',
+        amount: amount || dv.costPerUse
+      }, '*');
+    },
+
+    /* Listen for messages from DigiVault */
+    _init: function(){
+      window.addEventListener('message', function(e){
+        var d = e.data;
+        if(!d) return;
+        if(d.type === 'DIGIVAULT_CREDIT_SYNC'){
+          dv.credits = d.credits;
+          dv.costPerUse = d.creditCostPerUse || 1;
+          if(dv.onCreditUpdate) dv.onCreditUpdate(dv.credits);
+        }
+        if(d.type === 'DIGIVAULT_CREDIT_DEDUCTED'){
+          dv.credits = d.credits;
+          if(dv.onCreditUpdate) dv.onCreditUpdate(dv.credits);
+        }
+        if(d.type === 'DIGIVAULT_CREDIT_DENIED'){
+          if(dv.onDenied) dv.onDenied(d.required, d.credits);
+        }
+      });
+    }
+  };
+  dv._init();
+  window.DigiVault = dv;
+})();
+
+/* ─── USAGE EXAMPLE ─── */
+/* 
+DigiVault.onCreditUpdate = function(credits){
+  document.getElementById('my-credit-display').textContent = credits;
+};
+DigiVault.onDenied = function(required, have){
+  alert('Credit কম! দরকার: ' + required + ', আছে: ' + have);
+};
+
+// Barcode generate button click:
+btn.onclick = function(){
+  DigiVault.useCredit(1); // 1 credit কাটবে
+  generateBarcode();       // তারপর কাজ করবে
+};
+*/</pre>
+            </div>
+            <div id="sdk-copy-status" style="font-size:.8rem;color:var(--accent3);min-height:16px;margin-bottom:.5rem;text-align:center"></div>
+
+            <div style="background:rgba(124,109,250,.06);border:1px solid rgba(124,109,250,.15);border-radius:10px;padding:.9rem 1rem;font-size:.8rem;color:var(--muted);line-height:1.7">
+              <strong style="color:var(--text)">কীভাবে কাজ করে:</strong><br>
+              1️⃣ DigiVault app খুললে আপনার app কে <code style="background:var(--sub);padding:.1rem .3rem;border-radius:4px">DIGIVAULT_CREDIT_SYNC</code> signal দেয়<br>
+              2️⃣ আপনার app generate button এ <code style="background:var(--sub);padding:.1rem .3rem;border-radius:4px">DigiVault.useCredit(1)</code> call করে<br>
+              3️⃣ DigiVault credit কেটে <code style="background:var(--sub);padding:.1rem .3rem;border-radius:4px">DIGIVAULT_CREDIT_DEDUCTED</code> confirm করে<br>
+              4️⃣ Credit কম হলে <code style="background:var(--sub);padding:.1rem .3rem;border-radius:4px">DIGIVAULT_CREDIT_DENIED</code> পাঠায়
+            </div>
+          </div>
+
           <!-- ADMIN CREDENTIALS -->
           <div class="form-card">
             <div class="form-card-title">🔑 Admin Credentials পরিবর্তন</div>
@@ -1851,7 +1943,24 @@ function updateNav(){
   if(u){
     document.getElementById('credit-display').innerHTML=`<span class="credit-badge">💎 ${u.credits} Credits</span>`;
     document.getElementById('btn-profile').textContent='👤 '+u.name;
+    // Sync credit bar inside sw-overlay if open
+    _updateSwCreditBar();
+    // Also push updated credits into the active iframe
+    _sendCreditInfoToIframe();
   }
+}
+
+function copySDK(){
+  const code=document.getElementById('sdk-snippet').textContent;
+  navigator.clipboard.writeText(code).then(()=>{
+    const st=document.getElementById('sdk-copy-status');
+    st.textContent='✅ Copied! আপনার app এ paste করুন।';
+    setTimeout(()=>st.textContent='',3000);
+  }).catch(()=>{
+    const st=document.getElementById('sdk-copy-status');
+    st.textContent='⚠️ Manual copy করুন (Ctrl+A → Ctrl+C)';
+    setTimeout(()=>st.textContent='',3000);
+  });
 }
 
 // ===================== INLINE ACCOUNT POOL =====================
@@ -2213,15 +2322,222 @@ function confirmPurchase(){
   closeModal('purchase-modal');toast(`✅ ${p.name} purchased! Launching now...`,'success');
   updateNav();setTimeout(()=>launchSoftware(p),400);
 }
+// ══════════════════════════════════════════════════════
+//  DIGIVAULT CREDIT SYNC ENGINE v3.0
+//  Works for both:
+//   • Inline HTML tools  → postMessage (real-time, per-action)
+//   • External URL tools → credit bar overlay (read-only display)
+//  Inline HTML tools must send:  postMessage({type:'DIGIVAULT_USE_CREDIT', amount:1}, '*')
+//  Parent will reply:            DIGIVAULT_CREDIT_DEDUCTED | DIGIVAULT_CREDIT_DENIED
+// ══════════════════════════════════════════════════════
+let _activeIframeProduct = null;
+let _swIframeEl = null;
+let _swIsInlineHtml = false; // true = Blob iframe (same-origin, postMessage works)
+let _creditSyncInterval = null;
+
+// ── Credit bar update ──────────────────────────────────
+function _updateSwCreditBar(){
+  const u=state.currentUser;
+  const bar=document.getElementById('sw-credit-bar');
+  const disp=document.getElementById('sw-credit-display');
+  const costInfo=document.getElementById('sw-cost-info');
+  if(!u||!bar) return;
+
+  const p=_activeIframeProduct;
+  const isCredit = p && p.mono==='credit' && (p.creditAction||0)>0;
+
+  // Always show bar when tool is open
+  bar.style.display='flex';
+  disp.textContent=u.credits;
+
+  // Low-credit styling
+  if(u.credits<=3){ bar.classList.add('sw-credit-low'); }
+  else { bar.classList.remove('sw-credit-low'); }
+
+  // Cost-per-use badge
+  if(isCredit){
+    costInfo.style.display='inline';
+    const mode = _swIsInlineHtml ? 'per action' : 'per launch';
+    costInfo.textContent=`💸 ${p.creditAction} credit ${mode}`;
+  } else {
+    costInfo.style.display='none';
+  }
+}
+
+// ── Send credit state INTO iframe (for inline HTML tools) ─
+function _sendCreditInfoToIframe(){
+  const u=state.currentUser;
+  const p=_activeIframeProduct;
+  if(!u||!_swIframeEl||!_swIsInlineHtml) return;
+  try{
+    _swIframeEl.contentWindow.postMessage({
+      type:'DIGIVAULT_CREDIT_SYNC',
+      credits: u.credits,
+      creditCostPerUse: (p&&p.mono==='credit')?(p.creditAction||1):0,
+      userName: u.name,
+      productId: p?p.id:null,
+      productName: p?p.name:null
+    }, '*');
+  }catch(e){}
+}
+
+// ── Inject credit UI snippet into Inline HTML tools ───────
+// Appended to the Blob HTML so the tool can show credits & fire actions
+function _buildCreditBridgeScript(p){
+  if(!p||p.mono!=='credit'||(p.creditAction||0)===0) return '';
+  const cost=p.creditAction||1;
+  return `
+<style>
+#dv-credit-hud{
+  position:fixed;top:12px;right:12px;z-index:99999;
+  background:rgba(8,8,16,.92);border:1px solid rgba(109,250,189,.25);
+  border-radius:14px;padding:.45rem 1rem;display:flex;align-items:center;gap:.55rem;
+  font-family:'Inter',system-ui,sans-serif;font-size:.82rem;
+  backdrop-filter:blur(10px);box-shadow:0 4px 20px rgba(0,0,0,.4);
+  transition:all .3s;user-select:none;cursor:default;
+}
+#dv-credit-hud.low{border-color:rgba(250,109,109,.4);background:rgba(40,8,8,.92)}
+#dv-credit-hud .dv-gem{font-size:1rem}
+#dv-credit-hud .dv-amt{font-weight:700;color:#6dfabd;font-size:.9rem;min-width:1.5ch;transition:all .25s}
+#dv-credit-hud.low .dv-amt{color:#fa6d6d}
+#dv-credit-hud .dv-lbl{color:rgba(240,240,248,.5);font-size:.72rem}
+#dv-credit-hud .dv-cost{color:rgba(240,240,248,.4);font-size:.72rem;border-left:1px solid rgba(255,255,255,.1);padding-left:.5rem;margin-left:.1rem}
+@keyframes dvFlash{0%{transform:scale(1.25);color:#fa6d6d}100%{transform:scale(1);color:#6dfabd}}
+#dv-credit-hud .dv-amt.flash{animation:dvFlash .4s ease forwards}
+#dv-credit-hud.low .dv-amt.flash{animation:none}
+</style>
+<div id="dv-credit-hud">
+  <span class="dv-gem">💎</span>
+  <span class="dv-amt" id="dv-amt">—</span>
+  <span class="dv-lbl">credits</span>
+  <span class="dv-cost">${cost}/use</span>
+</div>
+<script>
+(function(){
+  var _credits=null;
+  var _cost=${cost};
+  var hudEl=document.getElementById('dv-credit-hud');
+  var amtEl=document.getElementById('dv-amt');
+
+  function updateHud(c){
+    _credits=c;
+    amtEl.textContent=c;
+    if(c<=3){hudEl.classList.add('low');}else{hudEl.classList.remove('low');}
+  }
+
+  // Listen for credit sync from parent
+  window.addEventListener('message',function(e){
+    var d=e.data;
+    if(!d) return;
+    if(d.type==='DIGIVAULT_CREDIT_SYNC'){
+      updateHud(d.credits);
+    }
+    if(d.type==='DIGIVAULT_CREDIT_DEDUCTED'){
+      updateHud(d.credits);
+      amtEl.classList.remove('flash');
+      void amtEl.offsetWidth;
+      amtEl.classList.add('flash');
+      setTimeout(function(){amtEl.classList.remove('flash');},450);
+    }
+    if(d.type==='DIGIVAULT_CREDIT_DENIED'){
+      updateHud(d.credits);
+      if(window.__dvOnDenied) window.__dvOnDenied(d);
+    }
+  });
+
+  // Expose global helper for the tool to call
+  // Usage inside tool:  dvUseCredit()  or  dvUseCredit(2)
+  window.dvUseCredit=function(amount){
+    var amt=amount||_cost;
+    if(_credits!==null && _credits<amt){
+      alert('⚠️ Insufficient credits! You need '+amt+' credit'+(amt>1?'s':'')+', but have '+_credits+'.');
+      return false;
+    }
+    window.parent.postMessage({type:'DIGIVAULT_USE_CREDIT',amount:amt},'*');
+    return true;
+  };
+
+  // Expose credit check
+  window.dvCredits=function(){ return _credits; };
+  window.dvCanUse=function(amt){ return _credits===null||_credits>=(amt||_cost); };
+
+  // Request initial sync
+  window.parent.postMessage({type:'DIGIVAULT_REQUEST_SYNC'},'*');
+})();
+<\/script>`;
+}
+
+// ── postMessage listener (parent window) ──────────────────
+window.addEventListener('message', function(e){
+  const d=e.data;
+  if(!d||typeof d.type!=='string') return;
+
+  // Inline tool requested sync
+  if(d.type==='DIGIVAULT_REQUEST_SYNC'){
+    _sendCreditInfoToIframe();
+    return;
+  }
+
+  if(d.type!=='DIGIVAULT_USE_CREDIT') return;
+
+  const u=state.currentUser;
+  const p=_activeIframeProduct;
+  if(!u||!p) return;
+  if(p.mono!=='credit'||(p.creditAction||0)===0) return;
+  if(!document.getElementById('sw-overlay').classList.contains('open')) return;
+  if(!_swIsInlineHtml) return; // external URLs cannot deduct via postMessage
+
+  const cost=p.creditAction||1;
+  const amount=Math.max(1, parseInt(d.amount)||cost);
+
+  if(u.credits<amount){
+    try{
+      _swIframeEl&&_swIframeEl.contentWindow.postMessage({
+        type:'DIGIVAULT_CREDIT_DENIED',
+        credits:u.credits,
+        required:amount,
+        message:'Insufficient credits'
+      },'*');
+    }catch(ex){}
+    toast(`⚠️ Credit কম! আছে ${u.credits}, দরকার ${amount}`,'error');
+    return;
+  }
+
+  // Deduct
+  u.credits-=amount;
+  saveUsersToStorage();
+  updateNav();
+  _updateSwCreditBar();
+
+  // Flash credit display in header bar
+  const disp=document.getElementById('sw-credit-display');
+  if(disp){
+    disp.classList.add('flash-deduct');
+    setTimeout(()=>disp.classList.remove('flash-deduct'),400);
+  }
+
+  // Reply to iframe
+  try{
+    _swIframeEl&&_swIframeEl.contentWindow.postMessage({
+      type:'DIGIVAULT_CREDIT_DEDUCTED',
+      credits:u.credits,
+      deducted:amount,
+      message:'Credit deducted'
+    },'*');
+  }catch(ex){}
+
+  toast(`💎 ${amount} credit কাটা হয়েছে — বাকি: ${u.credits}`,'info');
+});
+
+// ── Main launch function ───────────────────────────────────
 function launchSoftware(p){
-  // Account-pool type: show credentials in modal, not sw-overlay
+  // Account-pool type
   if(p.type==='account'||p.mono==='account'){
     const u=state.currentUser;if(!u) return;
     const assignedOrder=state.orders.find(o=>o.userId===u.id&&o.productId===p.id&&o.status==='approved'&&o.assignedAccount);
     if(assignedOrder&&assignedOrder.assignedAccount){
       showUnlockedAccount(p,assignedOrder.assignedAccount);
     } else {
-      // Show locked state
       document.getElementById('purchase-modal-content').innerHTML=`
         <div style="text-align:center;padding:1.5rem 0">
           <div style="font-size:3rem;margin-bottom:.8rem">🔒</div>
@@ -2233,23 +2549,57 @@ function launchSoftware(p){
     }
     return;
   }
+
+  // Reset state
+  _activeIframeProduct=p;
+  _swIframeEl=null;
+  _swIsInlineHtml=false;
+  if(_creditSyncInterval){ clearInterval(_creditSyncInterval); _creditSyncInterval=null; }
+
   document.getElementById('sw-title').textContent=p.emoji+' '+p.name;
   const body=document.getElementById('sw-body');
+
   if(p.type==='iframe'||p.type==='url'){
-    body.innerHTML=`<iframe src="${p.url||p.zip}" allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>`;
+    // ── EXTERNAL URL — credit bar shows balance only (no postMessage deduction) ──
+    _swIsInlineHtml=false;
+    body.innerHTML=`<iframe id="sw-active-iframe" src="${p.url||p.zip}" allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads" style="width:100%;height:100%;border:none;min-height:85vh"></iframe>`;
+    _swIframeEl=document.getElementById('sw-active-iframe');
+    // For external: poll & keep credit bar in sync with nav
+    _creditSyncInterval=setInterval(_updateSwCreditBar, 2000);
+
   } else if(p.type==='html'){
-    const blob=new Blob([p.html||'<p>No content</p>'],{type:'text/html'});
-    body.innerHTML=`<iframe src="${URL.createObjectURL(blob)}" allow="fullscreen"></iframe>`;
+    // ── INLINE HTML — inject credit bridge so tool can fire dvUseCredit() ──
+    _swIsInlineHtml=true;
+    const bridge=_buildCreditBridgeScript(p);
+    // Inject bridge before </body> or at end
+    let html=p.html||'<p>No content</p>';
+    html = html.includes('</body>') ? html.replace('</body>', bridge+'</body>') : html+bridge;
+    const blob=new Blob([html],{type:'text/html'});
+    const blobUrl=URL.createObjectURL(blob);
+    body.innerHTML=`<iframe id="sw-active-iframe" src="${blobUrl}" allow="fullscreen" style="width:100%;height:100%;border:none;min-height:85vh"></iframe>`;
+    _swIframeEl=document.getElementById('sw-active-iframe');
+    _swIframeEl.addEventListener('load',function(){
+      setTimeout(_sendCreditInfoToIframe, 200);
+    });
+
   } else if(p.type==='folder'&&p.zipUrl){
-    body.innerHTML=`<div class="sw-placeholder"><div class="icon">📁</div><p>ZIP uploaded software. In a live server, this would be extracted and served.</p><a href="${p.zipUrl}" download style="color:var(--accent)">Download Package</a></div>`;
+    body.innerHTML=`<div class="sw-placeholder"><div class="icon">📁</div><p>ZIP software — download to use.</p><a href="${p.zipUrl}" download style="color:var(--accent)">⬇ Download Package</a></div>`;
   } else {
-    body.innerHTML=`<div class="sw-placeholder"><div class="icon">${p.emoji}</div><p>Software is ready. Configure the URL/embed in Admin Panel.</p></div>`;
+    body.innerHTML=`<div class="sw-placeholder"><div class="icon">${p.emoji}</div><p>Configure URL/embed in Admin Panel.</p></div>`;
   }
+
+  _updateSwCreditBar();
   document.getElementById('sw-overlay').classList.add('open');
 }
+
 function closeSoftware(){
   document.getElementById('sw-overlay').classList.remove('open');
   document.getElementById('sw-body').innerHTML='';
+  _activeIframeProduct=null;
+  _swIframeEl=null;
+  _swIsInlineHtml=false;
+  if(_creditSyncInterval){ clearInterval(_creditSyncInterval); _creditSyncInterval=null; }
+  document.getElementById('sw-credit-bar').style.display='none';
 }
 
 // ===================== USER PASSWORD CHANGE =====================
