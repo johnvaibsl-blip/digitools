@@ -82,18 +82,9 @@
   // Simple but effective XOR+Base64 obfuscation for localStorage
   // (Pure JS — no external lib needed)
   var _EK = (function(){
-    // Derive a per-browser key from navigator fingerprint
-    var fp = [
-      navigator.language||'',
-      screen.colorDepth||'',
-      navigator.hardwareConcurrency||'',
-      navigator.platform||''
-    ].join('|');
-    // Simple hash to 32-char key
-    var h = 0;
-    for(var i=0;i<fp.length;i++){ h = ((h<<5)-h)+fp.charCodeAt(i); h|=0; }
-    var key = Math.abs(h).toString(36).repeat(8).substring(0,32);
-    return key;
+    // Fixed key — consistent across all browsers/devices/environments
+    // (fingerprint-based key breaks cross-environment deployments)
+    return 'dv2025_k9x#mP!qZ3nL@wR8sT$vY6bA';
   })();
 
   function _xorEncrypt(str, key){
